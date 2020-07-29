@@ -1,0 +1,102 @@
+<!-- Unsub From Publist - starts -->
+<script runat="server">
+Platform.Load("core","1.1.5");
+try {
+</script>
+%%[
+/*  https://salesforce.stackexchange.com/questions/252746/unsubscribe-an-user-from-publication-list-using-ampscript-in-marketing-cloud */
+VAR  @subKey, @err, @clientID, @errMsg
+SET @MID = "515005544" //BCG BAU
+SET @clientID = CreateObject("ClientID")
+SetObjectProperty(@clientID, "ID", @MID)
+SET @err = 0
+//SET @subKey = Base64Decode(RequestParameter('u'))
+set @subKey = RequestParameter("subscriberKey")
+set @publicationID = RequestParameter("listId")
+
+var @ListSubObj, @rr, @sfp1, @sfp2, @cfp
+
+set @rr = CreateObject("RetrieveRequest")
+SetObjectProperty(@rr,"ObjectType","ListSubscriber")
+AddObjectArrayItem(@rr,"Properties","ListID")
+AddObjectArrayItem(@rr,"Properties","Status")
+
+set @sfp1 = CreateObject("SimpleFilterPart")
+SetObjectProperty(@sfp1,"Property","SubscriberKey") 
+SetObjectProperty(@sfp1,"SimpleOperator","equals")
+AddObjectArrayItem(@sfp1,"Value",@subKey)
+
+set @sfp2 = CreateObject("SimpleFilterPart")
+SetObjectProperty(@sfp2,"Property","ListID")
+SetObjectProperty(@sfp2,"SimpleOperator","equals")
+AddObjectArrayItem(@sfp2,"Value",@publicationID)
+
+set @cfp = CreateObject("ComplexFilterPart")
+SetObjectProperty(@cfp,"LeftOperand", @sfp1)
+SetObjectProperty(@cfp,"LogicalOperator", "AND")
+SetObjectProperty(@cfp,"RightOperand", @sfp2)
+
+SetObjectProperty(@rr,"Filter",@cfp)
+
+set @ListSubObj = InvokeRetrieve(@rr,@rrStatus,@rrRequestID)
+
+if rowCount(@ListSubObj) > 0 then 
+  var @row
+  set @row = row(@ListSubObj, 1)
+  set @status = field(@row,'Status')
+  //OutputLine(Concat("Status ==> ", @status))
+  if @status != "Active" then
+	  //USER HAVE ALREADY UNBSUBSCRIBED OR NEVER CONFIRMED
+	  //OutputLine("USER HAVE ALREADY UNBSUBSCRIBED OR NEVER CONFIRMED")
+	  SET @errMsg = "You have already unsubscribed [or] not part of the list."
+	  SET @err = 2
+  elif @status == "Unsubscribed" then /* @status != "Active" */
+	  SET @err = 1
+	  SET @errMsg = "You were already Unsubscribed."
+  else /* @status != "Active" */
+	  //SET USER STATUS TO UNSUBSCRIBED IN THE LIST
+	  //OutputLine("SET USER STATUS TO UNSUBSCRIBED IN THE LIST")
+	  VAR @ts_sub
+	  SET @ts_sub = CreateObject("Subscriber")
+	  SetObjectProperty(@ts_sub, "SubscriberKey", @subKey)
+
+	  // GET THE LIST
+	  // OutputLine("GET THE LIST")
+	  SET @List = CreateObject("SubscriberList")
+	  SetObjectProperty(@List, "ID", @publicationID)
+	  SetObjectProperty(@List, "Status", "Unsubscribed")
+
+	  // ADD THE LIST TO CONTACT
+	  // OutputLine("ADD THE LIST TO CONTACT")
+	  AddObjectArrayItem( @ts_sub, "Lists", @List )
+	  // UPDATE THE CONTACT
+	  // OutputLine("UPDATE THE CONTACT")
+	  InvokeUpdate(@ts_sub)
+	  SET @err = 0
+	  SET @errMsg = "Unsubscription successful."
+  endif /* @status != "Active" */
+  else /* rowCount(@ListSubObj) > 0  */
+  //OutputLine(Concat(@subKey,' Subscriber not found!'))
+  SET @err = 1
+  SET @errMsg = "Subscriber not found."
+endif /* rowCount(@ListSubObj) > 0  */
+
+set @SubscriberKey = RequestParameter("SubscriberKey")
+set @JobId = RequestParameter("JobId")
+set @ListId = RequestParameter("ListId")
+set @BatchId = RequestParameter("BatchId")
+set @Reason = RequestParameter("Reason")
+set @upsertCount = upsertData("BCG_Unsubscribe_Logs",2,"SubscriberKey", @SubscriberKey, "UnsubscribeDateTime",Now(1),"JobId", @JobId, "ListId", @ListId, "BatchId", @BatchId, "Reason", @Reason)
+]%%
+<script runat="server">
+} catch (e) {
+//Write("<br>" + Stringify('Subscriber not found'))
+Write(" ")
+}
+</script>
+<!-- Unsub From Publist - ends -->
+<br>
+<br>
+DEBUG:<br>
+List ID : %%=v(@listid)=%%<br>
+Final Msg: %%=v(@errMsg)=%%
